@@ -1,0 +1,132 @@
+#include<LiquidCrystal.h>	//include LiquidCrystal library
+
+LiquidCrystal lcd(8,9,10,11,12,13);	 // initializes LCD
+
+int displaySetting=1; 	//initialize displaySetting
+const int MAX_DISPLAYS = 3; 	//Set number of max displays
+const int buttonPin = 3; 		//Set the pin the button is on
+unsigned long lastDisplaySwitch = millis();		 //defines lastDisplaySwitch
+const int DISPLAY_DELAY = 250; 	//set delay between switching displays
+
+const int interruptPin = 2;	 //Set IR LED pin
+
+int breakCount = 0; 	//initialize breakCount
+unsigned long startTime = 0; 		//initialize startTime
+unsigned long endTime = 0;	 //initialize endTime
+int rpm = 0; 	//initialize rpm
+int numberOfBlades = 4;	 //sets number of blades
+
+
+double n = 0; 	//initialize efficiency 
+double p_out = 0; 	//initialize power output
+double p_in = 0; 	//initialize power input
+double t_in = 0; 	//initialize torque in
+double n_in = 0;	//initialize n_in
+double t_out_nm = 0; 		//initialize torque in
+double t_out_gcm= 0; 	//initialize torque in
+double n_out = 0;	//initialize n_out
+double g_r = 0;	//sets g_r
+double nt_in = 0;	//sets nt_in
+double nt_out = 0; 	//sets nt_out
+double n_motor = 0;	//set n_motor
+double p_inmotor = 0;		//set p_inmotor
+
+
+void setup() {
+  // put your setup code here, to run once:
+  lcd.begin(16,2); 	//starts lcd
+  lcd.display(); 	//turns on lcd
+
+  pinMode(interruptPin,INPUT);	 //sets input pin to interruptPin
+  pinMode(buttonPin,INPUT);	//sets input pin to buttonPin
+  attachInterrupt(digitalPinToInterrupt(buttonPin),changeDisplaySetting,FALLING); //when the button is pressed, change display
+  
+  attachInterrupt(digitalPinToInterrupt(interruptPin), broken, FALLING); //when the LED connection is interrupted, do broken
+
+  Serial.begin(9600); //Sets data transmission to 9600 bits/sec
+}
+
+void loop() {
+  displayLCD(); 	//turn on display
+  if (breakCount >= 30)	// if the breakcount is greater than or equal to 30
+  {
+    delay(1000); 	//wait a second
+    if (breakCount >=30){if the breakcount is still greater than or equal to 30
+      endTime = millis(); 	//set endTime equal to millis()
+      double r = (double)breakCount/numberOfBlades; 	//calculate rotations
+      double p = (double)(endTime-startTime)/60000; 	//calculates time
+      rpm = r/p; 		//calculates and sets rpm
+      breakCount = 0; 	//sets breakcount back to 0
+    } 
+    Serial.println(rpm); 	//print rpm in serial monitor
+  }
+  n_in = rpm; 		//sets n_in to rpm
+  nt_in = 64;		 //sets nt_in to 64
+  nt_out = 8; 		//set nt_out to 8
+  g_r = nt_in / nt_out; 		//calculates g_r
+  n_out = g_r * n_in; 		//calculates n_out
+  t_out_gcm = (n_out-12800)/-40; 	//calculates t_out_gcm
+  t_out_nm = t_out_gcm * 0.0000980655; 	//calculates t_out_nm
+  t_in = t_out_nm * n_out / n_in;	 //calculates t_in
+  p_in = t_in * n_in / 9549 * 1000; 	//calculates p_in
+  if (t_out_gcm <= 48)// if t_out_gcm is less than or equal to 48 	//start of if statement if variable is less than or equal to 48 do this. 
+  {
+    n_motor = (-0.001618 * t_out_gcm * t_out_gcm + 0.363542 * t_out_gcm + 49.376500)/100; //calculate n_motor
+  }
+ else	//if variable is greater than 48
+  {
+    n_motor = (-0.000434 * t_out_gcm * t_out_gcm - 0.072269 * t_out_gcm + 67.566800)/100; //calculate n_motor
+  }
+  p_inmotor = -0.000428 * t_out_gcm * t_out_gcm + 0.136943 * t_out_gcm + 0.000739; //calculate p_in_motor
+  p_out = n_motor * p_inmotor; 	//calculate p_out
+  n = p_out / p_in;	 //calculates n which is efficiency 
+}
+void displayLCD()
+{
+  switch(displaySetting) 	//switch statement for the displaySetting variable
+  {
+    case 1: 	//if displaySetting = 1
+      lcd.clear(); 	 //clears lcd
+      lcd.print("RPM: ");	 //prints RPM: on lcd
+      lcd.print(rpm); 	//prints rpm variable
+      Break; 	//done leaves block of code
+    case 2: //if displaySetting = 2
+      lcd.clear();  	//clears lcd
+      lcd.print("Output = "); 	//print Output= on lcd
+      lcd.print(p_out);	 //prints p_out
+      Break; 	//Done
+    case 3: 	//if displaySetting = 2
+      lcd.clear(); 	 //clears lcd
+      lcd.print("E = ");	 //prints E= on lcd
+      lcd.print(n*100); 	//prints variable n multiplied by 100
+      lcd.print("%"); 	//prints percent side
+      break; 	//Done
+    Default: 	//if displaySetting anything else
+      lcd.clear(); 	//clears lcd
+      lcd.print("Unknown Setting!"); //displays Unknown Setting! if there is any other number
+  }
+}
+
+void changeDisplaySetting()		 //function to change display setting
+{
+  if (lastDisplaySwitch + DISPLAY_DELAY < millis())	//if given function is less then variable execute this block of code. 
+  {
+    lastDisplaySwitch = millis(); 	//setting variables
+    Serial.println("Switching display");	//print ln to switching display 
+    displaySetting++;		//increment after by one 
+    if(displaySetting > MAX_DISPLAYS) //goes back to the first display if the button is pressed on the last display
+    {
+      displaySetting = 1;	//sets equal to one. 
+    }
+    displayLCD(); 	//display lcd
+  }
+}
+void broken() 		//function for when connection is broken 
+{
+  if(breakCount == 0) 		//sets startTime = millis() if breakcount = 0
+  {
+    startTime = millis();	//start time equal to millis()
+  }
+  breakCount++; 	//adds one to break count
+
+}
